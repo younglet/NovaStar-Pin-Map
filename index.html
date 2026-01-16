@@ -9,6 +9,8 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         body {
@@ -108,6 +110,8 @@
             max-width: 100%;
             height: auto;
             background: white;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .pin-info {
@@ -216,6 +220,18 @@
         // SPI和I2C引脚距离图片的水平距离
         const I2C_PIN_OFFSET = 120;
         const SPI_PIN_OFFSET = -100;
+
+        // 格式化GPIO文字：GPIO 和数字之间留空隙，单数字右对齐
+        function formatGpioText(pinName) {
+            // 提取数字部分
+            const match = pinName.match(/GPIO(\d+)/);
+            if (match) {
+                const num = match[1];
+                const paddedNum = num.padStart(2, ' '); // 单数字前面加空格实现右对齐
+                return 'GPIO ' + paddedNum;
+            }
+            return pinName;
+        }
 
         // ===== 全局变量 =====
         let pinConfig = null;
@@ -483,7 +499,8 @@
                 const isMatching = hasSelection && isPinMatching(pin);
                 const opacity = !hasSelection ? 1 : (isMatching ? 1 : 0.2);
 
-                ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
+                // 被选中时圆点变色
+                ctx.fillStyle = isMatching ? '#fbbf24' : `rgba(102, 126, 234, ${opacity})`;
                 ctx.beginPath();
                 ctx.arc(leftEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
@@ -498,9 +515,9 @@
                 }
 
                 ctx.fillStyle = !hasSelection ? '#333' : (isMatching ? '#333' : '#ccc');
-                ctx.font = 'bold 13px Arial';
+                ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
                 ctx.textAlign = 'right';
-                ctx.fillText(pin.name, leftEdgeX - 45, y + 5);
+                ctx.fillText(formatGpioText(pin.name), leftEdgeX - 20, y + 5);
 
                 pin._x = leftEdgeX;
                 pin._y = y;
@@ -515,7 +532,8 @@
                 const isMatching = hasSelection && isPinMatching(pin);
                 const opacity = !hasSelection ? 1 : (isMatching ? 1 : 0.2);
 
-                ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
+                // 被选中时圆点变色
+                ctx.fillStyle = isMatching ? '#fbbf24' : `rgba(102, 126, 234, ${opacity})`;
                 ctx.beginPath();
                 ctx.arc(rightEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
@@ -530,9 +548,9 @@
                 }
 
                 ctx.fillStyle = !hasSelection ? '#333' : (isMatching ? '#333' : '#ccc');
-                ctx.font = 'bold 13px Arial';
+                ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
                 ctx.textAlign = 'left';
-                ctx.fillText(pin.name, rightEdgeX + 45, y + 5);
+                ctx.fillText(formatGpioText(pin.name), rightEdgeX + 20, y + 5);
 
                 pin._x = rightEdgeX;
                 pin._y = y;
@@ -568,9 +586,9 @@
                     ctx.fillRect(i2cEdgeX + 10, y - 10, 90, 20);
 
                     ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 13px Arial';
+                    ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
                     ctx.textAlign = 'left';
-                    ctx.fillText(i2cPin.name, i2cEdgeX + 18, y + 5);
+                    ctx.fillText(formatGpioText(i2cPin.name), i2cEdgeX + 18, y + 5);
 
                     // 保存位置信息到全局变量
                     i2cPinPositions[i2cPin.pin] = { _x: i2cEdgeX, _y: y, _edge: 'i2c' };
@@ -608,9 +626,9 @@
                     ctx.fillRect(spiEdgeX + 10, y - 10, 90, 20);
 
                     ctx.fillStyle = '#fff';
-                    ctx.font = 'bold 13px Arial';
+                    ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
                     ctx.textAlign = 'left';
-                    ctx.fillText(spiPin.name, spiEdgeX + 18, y + 5);
+                    ctx.fillText(formatGpioText(spiPin.name), spiEdgeX + 18, y + 5);
 
                     // 保存位置信息到全局变量
                     spiPinPositions[spiPin.pin] = { _x: spiEdgeX, _y: y, _edge: 'spi' };
@@ -772,10 +790,6 @@
                 {
                     title: 'I2S (数字音频)',
                     content: '可用于音频输入输出<br>支持多种音频格式'
-                },
-                {
-                    title: '特殊功能引脚',
-                    content: 'GPIO0: BOOT按钮<br>GPIO1/3: UART0默认引脚<br>GPIO6-11: PSRAM内置'
                 }
             ];
 

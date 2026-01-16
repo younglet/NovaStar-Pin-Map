@@ -53,7 +53,7 @@
       "features": ["ADC2_CH5", "TOUCH5", "PWM"]
     },
     {
-      "pin": "4",
+      "pin": "04",
       "name": "GPIO4",
       "function": "通用I/O",
       "features": ["ADC2_CH0", "TOUCH0", "PWM"]
@@ -71,13 +71,13 @@
       "features": ["PWM"]
     },
     {
-      "pin": "2",
+      "pin": "02",
       "name": "GPIO2",
       "function": "通用I/O",
       "features": ["ADC2_CH2", "TOUCH2", "PWM"]
     },
     {
-      "pin": "5",
+      "pin": "05",
       "name": "GPIO5",
       "function": "SPI CS",
       "features": ["PWM"]
@@ -120,13 +120,13 @@
     }
   ],
   "i2c": {
-    "SDA": 22,
-    "SCL": 21
+    "SDA": "22",
+    "SCL": "21"
   },
   "spi": {
-    "MOSI": 23,
-    "MISO": 19,
-    "SCK": 18,
-    "CS": 5
+    "MOSI": "23",
+    "MISO": "19",
+    "SCK": "18",
+    "CS": "05"
   }
 }
