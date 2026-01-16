@@ -185,7 +185,23 @@
             padding: 15px;
             border-left: 4px solid #667eea;
             border-radius: 6px;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
         }
+
+        .info-item.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .info-item:nth-child(2) { transition-delay: 0.1s; }
+        .info-item:nth-child(3) { transition-delay: 0.2s; }
+        .info-item:nth-child(4) { transition-delay: 0.3s; }
+        .info-item:nth-child(5) { transition-delay: 0.4s; }
+        .info-item:nth-child(6) { transition-delay: 0.5s; }
+        .info-item:nth-child(7) { transition-delay: 0.6s; }
+        .info-item:nth-child(8) { transition-delay: 0.7s; }
 
         .info-item strong {
             color: #667eea;
@@ -905,39 +921,39 @@
             const infoGrid = document.getElementById('infoGrid');
             infoGrid.innerHTML = '';
 
-            // 添加基本说明
+            // 功能介绍（不包含具体引脚列表）
             const infoItems = [
                 {
                     title: 'ADC (模拟转数字)',
-                    content: 'ADC1: GPIO32-39 (6通道)<br>ADC2: GPIO0, 2, 4, 12-15, 25-27 (8通道)'
+                    content: '2个ADC单元，共14个通道<br>12位分辨率，0-4095量化范围'
                 },
                 {
                     title: 'DAC (数字转模拟)',
-                    content: 'GPIO25 (DAC1)<br>GPIO26 (DAC2)'
+                    content: '2个独立DAC通道<br>8位分辨率，0-255输出范围'
                 },
                 {
                     title: 'I2C (集成电路总线)',
-                    content: `SDA: GPIO${pinConfig.i2c.SDA}<br>SCL: GPIO${pinConfig.i2c.SCL}`
+                    content: '主从模式支持<br>标准模式100kHz，快速模式400kHz'
                 },
                 {
                     title: 'SPI (串行外设接口)',
-                    content: `MOSI: GPIO${pinConfig.spi.MOSI}<br>MISO: GPIO${pinConfig.spi.MISO}<br>SCK: GPIO${pinConfig.spi.SCK}<br>CS: GPIO${pinConfig.spi.CS}`
+                    content: '4线制全双工通信<br>最高支持80MHz时钟频率'
                 },
                 {
                     title: 'UART (串口)',
-                    content: 'UART0: GPIO1(TX)/GPIO3(RX)<br>UART1: GPIO10(TX)/GPIO9(RX)<br>UART2: GPIO17(TX)/GPIO16(RX)'
+                    content: '3个UART接口<br>支持波特率最高5Mbps'
                 },
                 {
                     title: 'PWM (脉冲宽度调制)',
-                    content: '16个独立PWM通道<br>可在几乎所有GPIO上实现'
+                    content: '16个独立PWM通道<br>可配置频率和占空比'
                 },
                 {
                     title: 'TOUCH (触摸传感)',
-                    content: '支持10个触摸通道<br>TOUCH0-9 分布在各引脚'
+                    content: '10个电容触摸感应通道<br>支持触摸按键和滑条'
                 },
                 {
                     title: 'I2S (数字音频)',
-                    content: '可用于音频输入输出<br>支持多种音频格式'
+                    content: '2个I2S接口<br>支持多种音频格式和采样率'
                 }
             ];
 
@@ -949,6 +965,27 @@
                     ${item.content}
                 `;
                 infoGrid.appendChild(div);
+            });
+
+            // 启动滚动观察器
+            setupScrollObserver();
+        }
+
+        // 滚动观察器：检测info-item进入视口时触发动画
+        function setupScrollObserver() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            });
+
+            document.querySelectorAll('.info-item').forEach(item => {
+                observer.observe(item);
             });
         }
 
