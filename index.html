@@ -53,6 +53,21 @@
             min-height: 850px;
         }
 
+        #animCanvas, #pinmapCanvas {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        #animCanvas {
+            z-index: 10;
+        }
+
+        #pinmapCanvas {
+            z-index: 5;
+        }
+
         .filter-panel {
             background: #f9f9f9;
             border-radius: 12px;
@@ -64,6 +79,9 @@
             bottom: 30px;
             left: 30px;
             right: 30px;
+            opacity: 0;
+            transition: opacity 0.6s ease-out;
+            z-index: 20;
         }
 
         .filter-container {
@@ -187,7 +205,8 @@
     </div>
 
     <div class="canvas-container">
-        <canvas id="pinmapCanvas"></canvas>
+        <canvas id="animCanvas"></canvas>
+        <canvas id="pinmapCanvas" style="display: none;"></canvas>
         <div id="pinInfo" class="pin-info" style="display: none;"></div>
         <div class="filter-panel" id="filterPanel"></div>
     </div>
@@ -270,20 +289,149 @@
         }
 
         function init() {
+            // 获取两个canvas
+            const animCanvasEl = document.getElementById('animCanvas');
             canvas = document.getElementById('pinmapCanvas');
-            ctx = canvas.getContext('2d');
 
             // 设置canvas大小
             const container = canvas.parentElement;
-            canvas.width = Math.min(1600, container.clientWidth - 80);
-            canvas.height = 850;
+            const canvasW = Math.min(1600, container.clientWidth - 80);
+            const canvasH = 850;
+
+            animCanvasEl.width = canvasW;
+            animCanvasEl.height = canvasH;
+            canvas.width = canvasW;
+            canvas.height = canvasH;
+
+            const animCtx = animCanvasEl.getContext('2d');
+            ctx = canvas.getContext('2d');
 
             // 统计功能和计数
             collectFeatureStats();
             buildFilterPanel();
-            drawPinmap();
-            setupInteractivity();
+
+            // 播放入场动画
+            playEntranceAnimation(animCanvasEl, animCtx, canvasW, canvasH, () => {
+                // 动画完成后的回调
+                // 显示交互canvas，隐藏动画canvas
+                animCanvasEl.style.display = 'none';
+                canvas.style.display = 'block';
+
+                // 绘制静态引脚图
+                drawPinmap();
+                setupInteractivity();
+
+                // 筛选面板淡入
+                const filterPanel = document.getElementById('filterPanel');
+                filterPanel.style.opacity = '1';
+            });
+
             buildInfoPanel();
+        }
+
+        // 入场动画：板子旋转 + 引脚从中间推出
+        function playEntranceAnimation(animCanvas, animCtx, canvasW, canvasH, onComplete) {
+            const centerX = canvasW / 2;
+            const startTime = performance.now();
+            const boardAnimDuration = 800; // 板子旋转时间
+            const pinAnimDelay = 600;      // 引脚动画延迟
+            const pinAnimDuration = 400;   // 引脚推出时间
+
+            const imgWidth = 573;
+            const imgHeight = (imgWidth * boardImage.height) / boardImage.width;
+            const imgX = centerX - imgWidth / 2;
+            const imgY = (canvasH - imgHeight) / 5;
+            const leftEdgeX = imgX - LEFT_PIN_OFFSET;
+            const rightEdgeX = imgX + imgWidth + RIGHT_PIN_OFFSET;
+            const startY = imgY + TOP_PIN_OFFSET;
+
+            // 准备引脚数据
+            const leftPins = pinConfig.left.map((pin, i) => ({
+                ...pin,
+                y: startY + LEFT_START_Y + i * PIN_ROW_HEIGHT,
+                side: 'left',
+                startX: centerX,
+                targetX: leftEdgeX
+            }));
+            const rightPins = pinConfig.right.map((pin, i) => ({
+                ...pin,
+                y: startY + RIGHT_START_Y + i * PIN_ROW_HEIGHT,
+                side: 'right',
+                startX: centerX,
+                targetX: rightEdgeX
+            }));
+
+            function easeOutCubic(t) {
+                return 1 - Math.pow(1 - t, 3);
+            }
+
+            function animate(timestamp) {
+                const elapsed = timestamp - startTime;
+
+                // 清空画布
+                animCtx.fillStyle = '#fff';
+                animCtx.fillRect(0, 0, canvasW, canvasH);
+
+                // 板子旋转动画
+                let boardProgress = Math.min(elapsed / boardAnimDuration, 1);
+                let boardEase = easeOutCubic(boardProgress);
+
+                // 3D旋转参数
+                const rotateX = 15 * (1 - boardEase);
+                const rotateY = -10 * (1 - boardEase);
+                const rotateZ = 5 * (1 - boardEase);
+                const scale = 0.9 + 0.1 * boardEase;
+                const opacity = boardEase;
+
+                // 绘制旋转的板子
+                animCtx.save();
+                animCtx.globalAlpha = opacity;
+                animCtx.translate(centerX, canvasH / 2);
+                animCtx.scale(scale, scale);
+                animCtx.rotate(rotateZ * Math.PI / 180);
+                animCtx.transform(1, 0, -Math.tan(rotateY * Math.PI / 180), 1, 0, 0);
+                animCtx.transform(1, -Math.tan(rotateX * Math.PI / 180), 0, 1, 0, 0);
+                animCtx.translate(-centerX, -canvasH / 2);
+                animCtx.drawImage(boardImage, imgX, imgY, imgWidth, imgHeight);
+                animCtx.restore();
+
+                // 引脚推出动画（从中间往两侧）
+                if (elapsed > pinAnimDelay) {
+                    const pinElapsed = elapsed - pinAnimDelay;
+                    const pinProgress = Math.min(pinElapsed / pinAnimDuration, 1);
+                    const pinEase = easeOutCubic(pinProgress);
+
+                    const allPins = [...leftPins, ...rightPins];
+                    allPins.forEach(pin => {
+                        const currentX = pin.startX + (pin.targetX - pin.startX) * pinEase;
+                        const opacity = pinEase;
+
+                        // 绘制圆点
+                        animCtx.globalAlpha = opacity;
+                        animCtx.fillStyle = 'rgba(102, 126, 234, 1)';
+                        animCtx.beginPath();
+                        animCtx.arc(currentX, pin.y, PIN_RADIUS, 0, Math.PI * 2);
+                        animCtx.fill();
+
+                        // 绘制文字
+                        const textX = pin.side === 'left' ? currentX - 20 : currentX + 20;
+                        animCtx.fillStyle = '#333';
+                        animCtx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
+                        animCtx.textAlign = pin.side === 'left' ? 'right' : 'left';
+                        animCtx.fillText(formatGpioText(pin.name), textX, pin.y + 5);
+                    });
+
+                    animCtx.globalAlpha = 1;
+                }
+
+                if (elapsed < boardAnimDuration + pinAnimDelay + pinAnimDuration) {
+                    requestAnimationFrame(animate);
+                } else {
+                    onComplete();
+                }
+            }
+
+            requestAnimationFrame(animate);
         }
 
         function collectFeatureStats() {
