@@ -178,7 +178,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>🔌 NovaStar ESP32 引脚功能图</h1>
+        <h1> NovaStar ESP32 引脚功能图</h1>
         <p>交互式引脚功能对应图</p>
     </div>
 
@@ -208,7 +208,15 @@
         // 各边的起始Y坐标（像素）
         const LEFT_START_Y = 80;
         const RIGHT_START_Y = 100;
-        
+
+        // SPI和I2C的起始Y坐标（像素，相对于图片顶部）
+        const I2C_START_Y = 265;
+        const SPI_START_Y = 135;
+
+        // SPI和I2C引脚距离图片的水平距离
+        const I2C_PIN_OFFSET = 120;
+        const SPI_PIN_OFFSET = -100;
+
         // ===== 全局变量 =====
         let pinConfig = null;
         let canvas = null;
@@ -216,6 +224,9 @@
         let boardImage = null;
         let selectedFeatures = new Set();
         let featureStats = {};
+        let allInteractivePins = [];  // 用于交互的引脚数组
+        let i2cPinPositions = {};     // I2C引脚位置
+        let spiPinPositions = {};     // SPI引脚位置
 
         // 从JSON加载配置
         async function loadConfig() {
@@ -294,6 +305,15 @@
                     featureStats['UART']++;
                 }
             });
+
+            // 统计I2C引脚
+            if (pinConfig.i2c) {
+                featureStats['I2C'] = 2; // SDA + SCL
+            }
+            // 统计SPI引脚
+            if (pinConfig.spi) {
+                featureStats['SPI'] = 4; // MOSI + MISO + SCK + CS
+            }
         }
 
         function buildFilterPanel() {
@@ -302,20 +322,44 @@
 
             const filterContainer = document.getElementById('filterContainer');
 
-            // 自定义排序顺序
-            const featureOrder = ['PWM', 'ADC', 'DAC', 'TOUCH', 'UART'];
+            // 自定义排序顺序（将I2C和SPI放在前面）
+            const featureOrder = ['I2C', 'SPI', 'PWM', 'ADC', 'DAC', 'TOUCH', 'UART'];
             const sortedFeatures = featureOrder.filter(f => featureStats[f] !== undefined);
 
             sortedFeatures.forEach(feature => {
                 const div = document.createElement('div');
                 div.className = 'filter-item';
 
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = 'featureFilter';
-                radio.id = 'filter-' + feature;
-                radio.addEventListener('change', (e) => {
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = 'filter-' + feature;
+
+                // 单选逻辑：选中时清除其他，只保留自己
+                checkbox.addEventListener('change', (e) => {
                     if (e.target.checked) {
+                        // 清除所有其他选中
+                        document.querySelectorAll('#filterContainer input[type="checkbox"]').forEach(cb => {
+                            if (cb !== checkbox) cb.checked = false;
+                        });
+                        selectedFeatures.clear();
+                        selectedFeatures.add(feature);
+                    } else {
+                        selectedFeatures.clear();
+                    }
+                    drawPinmap();
+                });
+
+                // 点击整个item区域也可以切换
+                div.addEventListener('click', (e) => {
+                    // 防止重复触发
+                    if (e.target === checkbox) return;
+
+                    checkbox.checked = !checkbox.checked;
+                    if (checkbox.checked) {
+                        // 清除其他选中
+                        document.querySelectorAll('#filterContainer input[type="checkbox"]').forEach(cb => {
+                            if (cb !== checkbox) cb.checked = false;
+                        });
                         selectedFeatures.clear();
                         selectedFeatures.add(feature);
                     } else {
@@ -327,25 +371,52 @@
                 const label = document.createElement('label');
                 label.htmlFor = 'filter-' + feature;
                 label.textContent = feature;
+                label.style.cursor = 'pointer';
 
                 const count = document.createElement('span');
                 count.className = 'count';
                 count.textContent = ' (' + featureStats[feature] + ')';
                 label.appendChild(count);
 
-                div.appendChild(radio);
+                div.appendChild(checkbox);
                 div.appendChild(label);
                 filterContainer.appendChild(div);
             });
         }
 
-        function isPinMatching(pin) {
+        function isPinMatching(pin, isSpecialGroup = false) {
+            // 如果没有选中任何功能，所有引脚都匹配（正常显示）
             if (selectedFeatures.size === 0) {
-                return false;
+                return true;
             }
-            
+
+            // 检查是否是I2C引脚
+            if (selectedFeatures.has('I2C') && pinConfig.i2c) {
+                if (pin.pin == pinConfig.i2c.SDA || pin.pin == pinConfig.i2c.SCL) {
+                    // 在right/left组中不匹配I2C引脚，让它们只显示在I2C组
+                    if (!isSpecialGroup) {
+                        return false;
+                    }
+                    return true;
+                }
+            }
+
+            // 检查是否是SPI引脚
+            if (selectedFeatures.has('SPI') && pinConfig.spi) {
+                if (pin.pin == pinConfig.spi.MOSI ||
+                    pin.pin == pinConfig.spi.MISO ||
+                    pin.pin == pinConfig.spi.SCK ||
+                    pin.pin == pinConfig.spi.CS) {
+                    // 在right/left组中不匹配SPI引脚，让它们只显示在SPI组
+                    if (!isSpecialGroup) {
+                        return false;
+                    }
+                    return true;
+                }
+            }
+
             let matches = false;
-            
+
             // 检查features数组
             if (pin.features && Array.isArray(pin.features)) {
                 matches = pin.features.some(feature => {
@@ -360,12 +431,12 @@
                     return selectedFeatures.has(featureType);
                 });
             }
-            
+
             // 检查function字段中是否包含UART
             if (!matches && selectedFeatures.has('UART') && pin.function && pin.function.includes('UART')) {
                 matches = true;
             }
-            
+
             return matches;
         }
 
@@ -408,15 +479,16 @@
             pinConfig.left.forEach((pin, index) => {
                 const y = startY + LEFT_START_Y + index * PIN_ROW_HEIGHT;
 
-                const isMatching = isPinMatching(pin);
-                const opacity = selectedFeatures.size === 0 ? 1 : (isMatching ? 1 : 0.2);
+                const hasSelection = selectedFeatures.size > 0;
+                const isMatching = hasSelection && isPinMatching(pin);
+                const opacity = !hasSelection ? 1 : (isMatching ? 1 : 0.2);
 
                 ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
                 ctx.beginPath();
                 ctx.arc(leftEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 高亮环
+                // 高亮环（只有选中功能后才显示）
                 if (isMatching) {
                     ctx.strokeStyle = '#fbbf24';
                     ctx.lineWidth = 3;
@@ -425,7 +497,7 @@
                     ctx.stroke();
                 }
 
-                ctx.fillStyle = selectedFeatures.size === 0 ? '#333' : (isMatching ? '#333' : '#ccc');
+                ctx.fillStyle = !hasSelection ? '#333' : (isMatching ? '#333' : '#ccc');
                 ctx.font = 'bold 13px Arial';
                 ctx.textAlign = 'right';
                 ctx.fillText(pin.name, leftEdgeX - 45, y + 5);
@@ -439,15 +511,16 @@
             pinConfig.right.forEach((pin, index) => {
                 const y = startY + RIGHT_START_Y + index * PIN_ROW_HEIGHT;
 
-                const isMatching = isPinMatching(pin);
-                const opacity = selectedFeatures.size === 0 ? 1 : (isMatching ? 1 : 0.2);
+                const hasSelection = selectedFeatures.size > 0;
+                const isMatching = hasSelection && isPinMatching(pin);
+                const opacity = !hasSelection ? 1 : (isMatching ? 1 : 0.2);
 
                 ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
                 ctx.beginPath();
                 ctx.arc(rightEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 高亮环
+                // 高亮环（只有选中功能后才显示）
                 if (isMatching) {
                     ctx.strokeStyle = '#fbbf24';
                     ctx.lineWidth = 3;
@@ -456,7 +529,7 @@
                     ctx.stroke();
                 }
 
-                ctx.fillStyle = selectedFeatures.size === 0 ? '#333' : (isMatching ? '#333' : '#ccc');
+                ctx.fillStyle = !hasSelection ? '#333' : (isMatching ? '#333' : '#ccc');
                 ctx.font = 'bold 13px Arial';
                 ctx.textAlign = 'left';
                 ctx.fillText(pin.name, rightEdgeX + 45, y + 5);
@@ -465,27 +538,152 @@
                 pin._y = y;
                 pin._edge = 'right';
             });
+
+            // 绘制I2C引脚（当选中I2C时显示）
+            if (selectedFeatures.has('I2C') && pinConfig.i2c) {
+                const i2cPins = [
+                    { name: 'GPIO' + pinConfig.i2c.SDA, label: 'SDA', pin: pinConfig.i2c.SDA },
+                    { name: 'GPIO' + pinConfig.i2c.SCL, label: 'SCL', pin: pinConfig.i2c.SCL }
+                ];
+
+                const i2cEdgeX = imgX + I2C_PIN_OFFSET;
+
+                i2cPins.forEach((i2cPin, index) => {
+                    const y = startY + I2C_START_Y + index * PIN_ROW_HEIGHT;
+
+                    ctx.fillStyle = 'rgba(76, 175, 80, 1)';
+                    ctx.beginPath();
+                    ctx.arc(i2cEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 高亮环
+                    ctx.strokeStyle = '#4caf50';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(i2cEdgeX, y, PIN_RADIUS + 6, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    // 背景矩形（在圆点右侧）
+                    ctx.fillStyle = '#4caf50';
+                    ctx.fillRect(i2cEdgeX + 10, y - 10, 90, 20);
+
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 13px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(i2cPin.name, i2cEdgeX + 18, y + 5);
+
+                    // 保存位置信息到全局变量
+                    i2cPinPositions[i2cPin.pin] = { _x: i2cEdgeX, _y: y, _edge: 'i2c' };
+                });
+            }
+
+            // 绘制SPI引脚（当选中SPI时显示）
+            if (selectedFeatures.has('SPI') && pinConfig.spi) {
+                const spiPins = [
+                    { name: 'GPIO' + pinConfig.spi.MOSI, label: 'MOSI', pin: pinConfig.spi.MOSI },
+                    { name: 'GPIO' + pinConfig.spi.MISO, label: 'MISO', pin: pinConfig.spi.MISO },
+                    { name: 'GPIO' + pinConfig.spi.SCK, label: 'SCK', pin: pinConfig.spi.SCK },
+                    { name: 'GPIO' + pinConfig.spi.CS, label: 'CS', pin: pinConfig.spi.CS }
+                ];
+
+                const spiEdgeX = imgX + imgWidth + SPI_PIN_OFFSET;
+
+                spiPins.forEach((spiPin, index) => {
+                    const y = startY + SPI_START_Y + index * PIN_ROW_HEIGHT;
+
+                    ctx.fillStyle = 'rgba(255, 152, 0, 1)';
+                    ctx.beginPath();
+                    ctx.arc(spiEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 高亮环
+                    ctx.strokeStyle = '#ff9800';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(spiEdgeX, y, PIN_RADIUS + 6, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    // 背景矩形（在圆点右侧）
+                    ctx.fillStyle = '#ff9800';
+                    ctx.fillRect(spiEdgeX + 10, y - 10, 90, 20);
+
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 13px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(spiPin.name, spiEdgeX + 18, y + 5);
+
+                    // 保存位置信息到全局变量
+                    spiPinPositions[spiPin.pin] = { _x: spiEdgeX, _y: y, _edge: 'spi' };
+                });
+            }
+
+            // 更新用于交互的引脚数组
+            updateInteractivePins();
+        }
+
+        function updateInteractivePins() {
+            // 收集所有带位置信息的引脚用于交互
+            allInteractivePins = [
+                ...pinConfig.left.filter(pin => pin._x !== undefined).map(pin => ({ ...pin })),
+                ...pinConfig.right.filter(pin => pin._x !== undefined).map(pin => ({ ...pin }))
+            ];
+
+            // 如果选中了I2C，添加I2C引脚
+            if (selectedFeatures.has('I2C') && pinConfig.i2c) {
+                const i2cPins = [
+                    { pin: pinConfig.i2c.SDA, name: 'GPIO' + pinConfig.i2c.SDA, function: 'SDA (串行数据线)', features: ['I2C'] },
+                    { pin: pinConfig.i2c.SCL, name: 'GPIO' + pinConfig.i2c.SCL, function: 'SCL (串行时钟线)', features: ['I2C'] }
+                ];
+                // 使用保存的位置信息
+                i2cPins.forEach(i2cPin => {
+                    const pos = i2cPinPositions[i2cPin.pin];
+                    if (pos) {
+                        i2cPin._x = pos._x;
+                        i2cPin._y = pos._y;
+                        i2cPin._edge = pos._edge;
+                    }
+                });
+                allInteractivePins.push(...i2cPins);
+            }
+
+            // 如果选中了SPI，添加SPI引脚
+            if (selectedFeatures.has('SPI') && pinConfig.spi) {
+                const spiPins = [
+                    { pin: pinConfig.spi.MOSI, name: 'GPIO' + pinConfig.spi.MOSI, function: 'MOSI (主发从收数据线)', features: ['SPI'] },
+                    { pin: pinConfig.spi.MISO, name: 'GPIO' + pinConfig.spi.MISO, function: 'MISO (主收从发数据线)', features: ['SPI'] },
+                    { pin: pinConfig.spi.SCK, name: 'GPIO' + pinConfig.spi.SCK, function: 'SCK (串行时钟线)', features: ['SPI'] },
+                    { pin: pinConfig.spi.CS, name: 'GPIO' + pinConfig.spi.CS, function: 'CS (片选信号线)', features: ['SPI'] }
+                ];
+                // 使用保存的位置信息
+                spiPins.forEach(spiPin => {
+                    const pos = spiPinPositions[spiPin.pin];
+                    if (pos) {
+                        spiPin._x = pos._x;
+                        spiPin._y = pos._y;
+                        spiPin._edge = pos._edge;
+                    }
+                });
+                allInteractivePins.push(...spiPins);
+            }
         }
 
         function setupInteractivity() {
-            const allPins = [
-                ...pinConfig.left.map((pin, index) => ({ ...pin, _edge: 'left' })),
-                ...pinConfig.right.map((pin, index) => ({ ...pin, _edge: 'right' }))
-            ];
-
             canvas.addEventListener('mousemove', (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top;
 
                 let found = false;
-                for (let pin of allPins) {
+                for (let pin of allInteractivePins) {
                     if (pin._x && pin._y) {
                         const dx = mouseX - pin._x;
                         const dy = mouseY - pin._y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
 
-                        if (distance < PIN_RADIUS + 10) {
+                        // 只有匹配当前选中功能的引脚才显示弹窗
+                        // 对于I2C/SPI专用组，需要传入isSpecialGroup=true
+                        const isSpecial = pin._edge === 'i2c' || pin._edge === 'spi';
+                        if (distance < PIN_RADIUS + 10 && isPinMatching(pin, isSpecial)) {
                             showPinInfo(pin, mouseX, mouseY);
                             canvas.style.cursor = 'pointer';
                             found = true;
@@ -509,9 +707,15 @@
             const pinInfo = document.getElementById('pinInfo');
             let featureText = pin.features.join(' / ');
 
+            // 如果是I2C或SPI引脚，显示更详细的信息
+            let pinFunction = pin.function;
+            if (pin._label) {
+                pinFunction = `${pin._label} (${pin.function})`;
+            }
+
             pinInfo.innerHTML = `
                 <div class="pin-header">GPIO ${pin.pin}</div>
-                <div>${pin.function}</div>
+                <div>${pinFunction}</div>
                 <div class="pin-features">${featureText}</div>
             `;
 
