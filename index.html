@@ -339,6 +339,7 @@
 
                 // 筛选面板淡入
                 const filterPanel = document.getElementById('filterPanel');
+                filterPanel.style.transition = 'opacity 0.3s ease-out';
                 filterPanel.style.opacity = '1';
             });
 
@@ -349,9 +350,9 @@
         function playEntranceAnimation(animCanvas, animCtx, canvasW, canvasH, onComplete) {
             const centerX = canvasW / 2;
             const startTime = performance.now();
-            const boardAnimDuration = 800; // 板子旋转时间
-            const pinAnimDelay = 600;      // 引脚动画延迟
-            const pinAnimDuration = 400;   // 引脚推出时间
+            const boardAnimDuration = 600; // 板子旋转时间
+            const pinAnimDelay = 400;      // 引脚动画延迟
+            const pinAnimDuration = 300;   // 引脚推出时间
 
             const imgWidth = 573;
             const imgHeight = (imgWidth * boardImage.height) / boardImage.width;
@@ -921,11 +922,15 @@
             const infoGrid = document.getElementById('infoGrid');
             infoGrid.innerHTML = '';
 
-            // 功能介绍（不包含具体引脚列表）
+            // 功能介绍（根据 NovaStar 板子实际引出的引脚统计）
             const infoItems = [
                 {
+                    title: 'GPIO (通用输入输出)',
+                    content: '左侧7个 + 右侧12个 + I2C 2个 + SPI 3个<br>共24个可编程GPIO引脚'
+                },
+                {
                     title: 'ADC (模拟转数字)',
-                    content: '2个ADC单元，共14个通道<br>12位分辨率，0-4095量化范围'
+                    content: 'ADC1: 6通道<br>ADC2: 10通道<br>12位分辨率，0-4095量化范围'
                 },
                 {
                     title: 'DAC (数字转模拟)',
@@ -933,15 +938,15 @@
                 },
                 {
                     title: 'I2C (集成电路总线)',
-                    content: '主从模式支持<br>标准模式100kHz，快速模式400kHz'
+                    content: '2个引脚 (SDA, SCL)<br>支持标准/快速模式'
                 },
                 {
                     title: 'SPI (串行外设接口)',
-                    content: '4线制全双工通信<br>最高支持80MHz时钟频率'
+                    content: '4个引脚 (MOSI, MISO, SCK, CS)<br>4线制全双工通信'
                 },
                 {
                     title: 'UART (串口)',
-                    content: '3个UART接口<br>支持波特率最高5Mbps'
+                    content: '2个引脚 (TX, RX)<br>UART2 串口通信'
                 },
                 {
                     title: 'PWM (脉冲宽度调制)',
@@ -949,11 +954,7 @@
                 },
                 {
                     title: 'TOUCH (触摸传感)',
-                    content: '10个电容触摸感应通道<br>支持触摸按键和滑条'
-                },
-                {
-                    title: 'I2S (数字音频)',
-                    content: '2个I2S接口<br>支持多种音频格式和采样率'
+                    content: '10个触摸通道<br>支持触摸按键和滑条'
                 }
             ];
 
