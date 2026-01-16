@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovaStar (ESP32) Pinmap</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.8;
+        }
+
+        .canvas-container {
+            background: white;
+            border-radius: 20px;
+            padding: 0px;
+            max-width: 1400px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            min-height: 850px;
+        }
+
+        .filter-panel {
+            background: #f9f9f9;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 1400px;
+            width: calc(100% - 60px);
+            border: 1px solid #e0e0e0;
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            right: 30px;
+        }
+
+        .filter-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .filter-item:hover {
+            background: #e8f0ff;
+        }
+
+        .filter-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .filter-item label {
+            cursor: pointer;
+            flex: 1;
+            color: #333;
+            margin-bottom: 0;
+        }
+
+        .filter-item .count {
+            color: #999;
+            font-size: 0.85em;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            background: white;
+        }
+
+        .pin-info {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            pointer-events: none;
+            z-index: 100;
+            width: 250px;
+            word-wrap: break-word;
+        }
+
+        .pin-info .pin-header {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 6px;
+            font-size: 1.1em;
+        }
+
+        .pin-info .pin-features {
+            color: #aed581;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+
+        .info-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        .info-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
+        }
+
+        .info-item strong {
+            color: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔌 NovaStar ESP32 引脚功能图</h1>
+        <p>交互式引脚功能对应图</p>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="pinmapCanvas"></canvas>
+        <div id="pinInfo" class="pin-info" style="display: none;"></div>
+        <div class="filter-panel" id="filterPanel"></div>
+    </div>
+
+    <div class="info-panel">
+        <h3>📋 引脚功能说明</h3>
+        <div class="info-grid" id="infoGrid"></div>
+    </div>
+
+    <script>
+        // ===== 配置参数 =====
+        const PIN_RADIUS = 8;
+        // 引脚相对图片的位置参数
+        const LEFT_PIN_OFFSET = 20;        // 左侧引脚距离图片的水平距离
+        const RIGHT_PIN_OFFSET = 20;       // 右侧引脚距离图片的水平距离
+        const TOP_PIN_OFFSET = 15;         // 顶部引脚距离图片的垂直距离
+        const FILTER_PANEL_OFFSET = 50;    // 筛选面板距离图片下边缘的距离
+
+        // 行高（像素）
+        const PIN_ROW_HEIGHT = 26;
+
+        // 各边的起始Y坐标（像素）
+        const LEFT_START_Y = 80;
+        const RIGHT_START_Y = 100;
+        
+        // ===== 全局变量 =====
+        let pinConfig = null;
+        let canvas = null;
+        let ctx = null;
+        let boardImage = null;
+        let selectedFeatures = new Set();
+        let featureStats = {};
+
+        // 从JSON加载配置
+        async function loadConfig() {
+            try {
+                const response = await fetch('pins.json');
+                pinConfig = await response.json();
+                loadBoardImage();
+            } catch (error) {
+                console.error('Failed to load pins.json:', error);
+                alert('无法加载配置文件');
+            }
+        }
+
+        // 加载NovaStar图片
+        function loadBoardImage() {
+            boardImage = new Image();
+            boardImage.onload = () => {
+                init();
+            };
+            boardImage.onerror = () => {
+                console.error('Failed to load board image');
+                init();
+            };
+            boardImage.src = 'novastar.jpg';
+        }
+
+        function init() {
+            canvas = document.getElementById('pinmapCanvas');
+            ctx = canvas.getContext('2d');
+
+            // 设置canvas大小
+            const container = canvas.parentElement;
+            canvas.width = Math.min(1600, container.clientWidth - 80);
+            canvas.height = 850;
+
+            // 统计功能和计数
+            collectFeatureStats();
+            buildFilterPanel();
+            drawPinmap();
+            setupInteractivity();
+            buildInfoPanel();
+        }
+
+        function collectFeatureStats() {
+            featureStats = {};
+            const allPins = [
+                ...pinConfig.left.map((pin, index) => ({ ...pin, edge: 'left', index })),
+                ...pinConfig.right.map((pin, index) => ({ ...pin, edge: 'right', index }))
+            ];
+
+            allPins.forEach(pin => {
+                if (pin.features && Array.isArray(pin.features)) {
+                    pin.features.forEach(feature => {
+                        // 提取功能类型
+                        let featureType = feature;
+                        if (feature.startsWith('ADC')) {
+                            featureType = 'ADC';  // 所有ADC统一为 ADC
+                        } else if (feature.startsWith('TOUCH')) {
+                            featureType = 'TOUCH';
+                        } else if (feature.startsWith('DAC')) {
+                            featureType = 'DAC';
+                        }
+                        
+                        if (!featureStats[featureType]) {
+                            featureStats[featureType] = 0;
+                        }
+                        featureStats[featureType]++;
+                    });
+                }
+                
+                // 检查function字段中是否包含UART
+                if (pin.function && pin.function.includes('UART')) {
+                    if (!featureStats['UART']) {
+                        featureStats['UART'] = 0;
+                    }
+                    featureStats['UART']++;
+                }
+            });
+        }
+
+        function buildFilterPanel() {
+            const filterPanel = document.getElementById('filterPanel');
+            filterPanel.innerHTML = '<h3>📋 功能筛选</h3><div class="filter-container" id="filterContainer"></div>';
+
+            const filterContainer = document.getElementById('filterContainer');
+
+            // 自定义排序顺序
+            const featureOrder = ['PWM', 'ADC', 'DAC', 'TOUCH', 'UART'];
+            const sortedFeatures = featureOrder.filter(f => featureStats[f] !== undefined);
+
+            sortedFeatures.forEach(feature => {
+                const div = document.createElement('div');
+                div.className = 'filter-item';
+
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'featureFilter';
+                radio.id = 'filter-' + feature;
+                radio.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        selectedFeatures.clear();
+                        selectedFeatures.add(feature);
+                    } else {
+                        selectedFeatures.clear();
+                    }
+                    drawPinmap();
+                });
+
+                const label = document.createElement('label');
+                label.htmlFor = 'filter-' + feature;
+                label.textContent = feature;
+
+                const count = document.createElement('span');
+                count.className = 'count';
+                count.textContent = ' (' + featureStats[feature] + ')';
+                label.appendChild(count);
+
+                div.appendChild(radio);
+                div.appendChild(label);
+                filterContainer.appendChild(div);
+            });
+        }
+
+        function isPinMatching(pin) {
+            if (selectedFeatures.size === 0) {
+                return false;
+            }
+            
+            let matches = false;
+            
+            // 检查features数组
+            if (pin.features && Array.isArray(pin.features)) {
+                matches = pin.features.some(feature => {
+                    let featureType = feature;
+                    if (feature.startsWith('ADC')) {
+                        featureType = 'ADC';  // 所有ADC统一为 ADC
+                    } else if (feature.startsWith('TOUCH')) {
+                        featureType = 'TOUCH';
+                    } else if (feature.startsWith('DAC')) {
+                        featureType = 'DAC';
+                    }
+                    return selectedFeatures.has(featureType);
+                });
+            }
+            
+            // 检查function字段中是否包含UART
+            if (!matches && selectedFeatures.has('UART') && pin.function && pin.function.includes('UART')) {
+                matches = true;
+            }
+            
+            return matches;
+        }
+
+        function drawPinmap() {
+            const canvasW = canvas.width;
+            const canvasH = canvas.height;
+            const centerX = canvasW / 2;
+
+            // 清空画布
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvasW, canvasH);
+
+            // 绘制NovaStar图片
+            const imgWidth = 573;
+            const imgHeight = (imgWidth * boardImage.height) / boardImage.width;
+            const x = centerX - imgWidth / 2;
+            const y = (canvasH - imgHeight) / 5;
+
+            ctx.drawImage(boardImage, x, y, imgWidth, imgHeight);
+
+            // 存储图片位置用于引脚定位
+            drawPinAnnotations(x, y, imgWidth, imgHeight);
+        }
+
+        function drawPinAnnotations(imgX, imgY, imgWidth, imgHeight) {
+            // 基于图片的尺寸计算引脚位置
+            const leftEdgeX = imgX - LEFT_PIN_OFFSET;
+            const rightEdgeX = imgX + imgWidth + RIGHT_PIN_OFFSET;
+            const startY = imgY + TOP_PIN_OFFSET;
+
+            // 计算筛选面板应该放在的位置
+            const filterPanelTop = imgY + imgHeight + FILTER_PANEL_OFFSET;
+            const filterPanel = document.getElementById('filterPanel');
+            if (filterPanel) {
+                filterPanel.style.bottom = 'auto';
+                filterPanel.style.top = (filterPanelTop) + 'px';
+            }
+
+            // 绘制左侧引脚
+            pinConfig.left.forEach((pin, index) => {
+                const y = startY + LEFT_START_Y + index * PIN_ROW_HEIGHT;
+
+                const isMatching = isPinMatching(pin);
+                const opacity = selectedFeatures.size === 0 ? 1 : (isMatching ? 1 : 0.2);
+
+                ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
+                ctx.beginPath();
+                ctx.arc(leftEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 高亮环
+                if (isMatching) {
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(leftEdgeX, y, PIN_RADIUS + 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = selectedFeatures.size === 0 ? '#333' : (isMatching ? '#333' : '#ccc');
+                ctx.font = 'bold 13px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(pin.name, leftEdgeX - 45, y + 5);
+
+                pin._x = leftEdgeX;
+                pin._y = y;
+                pin._edge = 'left';
+            });
+
+            // 绘制右侧引脚
+            pinConfig.right.forEach((pin, index) => {
+                const y = startY + RIGHT_START_Y + index * PIN_ROW_HEIGHT;
+
+                const isMatching = isPinMatching(pin);
+                const opacity = selectedFeatures.size === 0 ? 1 : (isMatching ? 1 : 0.2);
+
+                ctx.fillStyle = `rgba(102, 126, 234, ${opacity})`;
+                ctx.beginPath();
+                ctx.arc(rightEdgeX, y, PIN_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 高亮环
+                if (isMatching) {
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(rightEdgeX, y, PIN_RADIUS + 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = selectedFeatures.size === 0 ? '#333' : (isMatching ? '#333' : '#ccc');
+                ctx.font = 'bold 13px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(pin.name, rightEdgeX + 45, y + 5);
+
+                pin._x = rightEdgeX;
+                pin._y = y;
+                pin._edge = 'right';
+            });
+        }
+
+        function setupInteractivity() {
+            const allPins = [
+                ...pinConfig.left.map((pin, index) => ({ ...pin, _edge: 'left' })),
+                ...pinConfig.right.map((pin, index) => ({ ...pin, _edge: 'right' }))
+            ];
+
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                let found = false;
+                for (let pin of allPins) {
+                    if (pin._x && pin._y) {
+                        const dx = mouseX - pin._x;
+                        const dy = mouseY - pin._y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < PIN_RADIUS + 10) {
+                            showPinInfo(pin, mouseX, mouseY);
+                            canvas.style.cursor = 'pointer';
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!found) {
+                    pinInfo.style.display = 'none';
+                    canvas.style.cursor = 'default';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                pinInfo.style.display = 'none';
+            });
+        }
+
+        function showPinInfo(pin, x, y) {
+            const pinInfo = document.getElementById('pinInfo');
+            let featureText = pin.features.join(' / ');
+
+            pinInfo.innerHTML = `
+                <div class="pin-header">GPIO ${pin.pin}</div>
+                <div>${pin.function}</div>
+                <div class="pin-features">${featureText}</div>
+            `;
+
+            // 位置调整（向右下偏移，避免鼠标遮挡）
+            let left = x + 40;
+            let top = y + 40;
+
+            if (left + 250 > canvas.width) {
+                left = x - 250 - 15;
+            }
+            if (top + 150 > canvas.height) {
+                top = y - 150;
+            }
+
+            pinInfo.style.left = left + 'px';
+            pinInfo.style.top = top + 'px';
+            pinInfo.style.display = 'block';
+        }
+
+        function buildInfoPanel() {
+            const infoGrid = document.getElementById('infoGrid');
+            infoGrid.innerHTML = '';
+
+            // 添加基本说明
+            const infoItems = [
+                {
+                    title: 'ADC (模拟转数字)',
+                    content: 'ADC1: GPIO32-39 (6通道)<br>ADC2: GPIO0, 2, 4, 12-15, 25-27 (8通道)'
+                },
+                {
+                    title: 'DAC (数字转模拟)',
+                    content: 'GPIO25 (DAC1)<br>GPIO26 (DAC2)'
+                },
+                {
+                    title: 'I2C (集成电路总线)',
+                    content: `SDA: GPIO${pinConfig.i2c.SDA}<br>SCL: GPIO${pinConfig.i2c.SCL}`
+                },
+                {
+                    title: 'SPI (串行外设接口)',
+                    content: `MOSI: GPIO${pinConfig.spi.MOSI}<br>MISO: GPIO${pinConfig.spi.MISO}<br>SCK: GPIO${pinConfig.spi.SCK}<br>CS: GPIO${pinConfig.spi.CS}`
+                },
+                {
+                    title: 'UART (串口)',
+                    content: 'UART0: GPIO1(TX)/GPIO3(RX)<br>UART1: GPIO10(TX)/GPIO9(RX)<br>UART2: GPIO17(TX)/GPIO16(RX)'
+                },
+                {
+                    title: 'PWM (脉冲宽度调制)',
+                    content: '16个独立PWM通道<br>可在几乎所有GPIO上实现'
+                },
+                {
+                    title: 'TOUCH (触摸传感)',
+                    content: '支持10个触摸通道<br>TOUCH0-9 分布在各引脚'
+                },
+                {
+                    title: 'I2S (数字音频)',
+                    content: '可用于音频输入输出<br>支持多种音频格式'
+                },
+                {
+                    title: '特殊功能引脚',
+                    content: 'GPIO0: BOOT按钮<br>GPIO1/3: UART0默认引脚<br>GPIO6-11: PSRAM内置'
+                }
+            ];
+
+            infoItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'info-item';
+                div.innerHTML = `
+                    <strong>${item.title}</strong><br>
+                    ${item.content}
+                `;
+                infoGrid.appendChild(div);
+            });
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', loadConfig);
+
+        // 响应式调整
+        window.addEventListener('resize', () => {
+            if (pinConfig) {
+                const container = canvas.parentElement;
+                canvas.width = Math.min(1200, container.clientWidth - 80);
+                drawPinmap();
+            }
+        });
+    </script>
+</body>
+</html>

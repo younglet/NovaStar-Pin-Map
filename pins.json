@@ -1,0 +1,132 @@
+{
+  "boardName": "NovaStar ESP32",
+  "description": "完整引脚功能对应表",
+  "left": [
+    {
+      "pin": "36",
+      "name": "GPIO36",
+      "function": "输入只读",
+      "features": ["ADC1_CH0", "VP"]
+    },
+    {
+      "pin": "39",
+      "name": "GPIO39",
+      "function": "输入只读",
+      "features": ["ADC1_CH3", "VN"]
+    },
+    {
+      "pin": "34",
+      "name": "GPIO34",
+      "function": "输入只读",
+      "features": ["ADC1_CH6"]
+    },
+    {
+      "pin": "35",
+      "name": "GPIO35",
+      "function": "输入只读",
+      "features": ["ADC1_CH7"]
+    },
+    {
+      "pin": "15",
+      "name": "GPIO15",
+      "function": "通用I/O",
+      "features": ["ADC2_CH3", "TOUCH3", "PWM"]
+    },
+    {
+      "pin": "32",
+      "name": "GPIO32",
+      "function": "通用I/O",
+      "features": ["ADC1_CH4", "TOUCH9", "PWM"]
+    },
+    {
+      "pin": "33",
+      "name": "GPIO33",
+      "function": "通用I/O",
+      "features": ["ADC1_CH5", "TOUCH8", "PWM"]
+    }
+  ],
+  "right": [
+    {
+      "pin": "12",
+      "name": "GPIO12",
+      "function": "通用I/O",
+      "features": ["ADC2_CH5", "TOUCH5", "PWM"]
+    },
+    {
+      "pin": "4",
+      "name": "GPIO4",
+      "function": "通用I/O",
+      "features": ["ADC2_CH0", "TOUCH0", "PWM"]
+    },
+    {
+      "pin": "16",
+      "name": "GPIO16",
+      "function": "UART2 RX",
+      "features": ["PWM"]
+    },
+    {
+      "pin": "17",
+      "name": "GPIO17",
+      "function": "UART2 TX",
+      "features": ["PWM"]
+    },
+    {
+      "pin": "2",
+      "name": "GPIO2",
+      "function": "通用I/O",
+      "features": ["ADC2_CH2", "TOUCH2", "PWM"]
+    },
+    {
+      "pin": "5",
+      "name": "GPIO5",
+      "function": "SPI CS",
+      "features": ["PWM"]
+    },
+    {
+      "pin": "13",
+      "name": "GPIO13",
+      "function": "通用I/O",
+      "features": ["ADC2_CH4", "TOUCH4", "PWM"]
+    },
+    {
+      "pin": "14",
+      "name": "GPIO14",
+      "function": "通用I/O",
+      "features": ["ADC2_CH6", "TOUCH6", "PWM"]
+    },
+    {
+      "pin": "0",
+      "name": "GPIO0",
+      "function": "通用I/O",
+      "features": ["ADC2_CH1", "TOUCH1", "PWM"]
+    },
+    {
+      "pin": "27",
+      "name": "GPIO27",
+      "function": "通用I/O",
+      "features": ["ADC2_CH7", "TOUCH7", "PWM"]
+    },
+    {
+      "pin": "26",
+      "name": "GPIO26",
+      "function": "DAC2",
+      "features": ["DAC2", "ADC2_CH9", "PWM"]
+    },
+    {
+      "pin": "25",
+      "name": "GPIO25",
+      "function": "DAC1",
+      "features": ["DAC1", "ADC2_CH8", "PWM"]
+    }
+  ],
+  "i2c": {
+    "SDA": 21,
+    "SCL": 22
+  },
+  "spi": {
+    "MOSI": 23,
+    "MISO": 19,
+    "SCK": 18,
+    "CS": 5
+  }
+}
